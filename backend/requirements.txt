@@ -1,0 +1,6 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+firebase-admin>=6.5
+google-maps-routeoptimization>=0.1
+ortools>=9.9
