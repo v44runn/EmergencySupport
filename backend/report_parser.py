@@ -11,8 +11,9 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
+from pathlib import Path
 
-load_dotenv()  # reads backend/.env (already in .gitignore)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-4-hydrogen")
 
@@ -58,7 +59,16 @@ def extract_requests(text: str) -> list[ExtractedRequest]:
     if not key:
         raise RuntimeError("GEMINI_API_KEY is not set (put it in backend/.env)")
 
-    client = genai.Client(api_key=key)
+    client = genai.Client(
+        api_key=key,
+        http_options=types.HttpOptions(
+            timeout=30000,
+            retry_options=types.HttpRetryOptions(
+                attempts=1
+            )
+        )
+    )
+
     resp = client.models.generate_content(
         model=MODEL,
         contents=f"<report>\n{text}\n</report>",
@@ -117,14 +127,14 @@ def parse_report(text: str, city_hint: Optional[str] = None) -> list[dict]:
             # fields for POST /requests
             "name": e.name,
             "location": location,
-            "quantity": 10 if quantity_estimated else e.quantity,
+            "quantity": e.quantity if not quantity_estimated else None,
             "priority": min(5, max(1, e.priority)),
             "window_end_min": e.deadline_minutes if e.deadline_minutes and e.deadline_minutes > 0 else None,
             "notes": notes,
             "source_text": text,
             # extra info so a person can check before confirming
             "location_text": e.location_text,
-            "needs_location": location is None,
+            "needs_location": location is None or geocoded,
             "location_from_geocoder": geocoded,
             "quantity_estimated": quantity_estimated,
         })
