@@ -1,122 +1,129 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useState } from 'react';
+import type { Depot, SupplyRequest, Vehicle, BlockedRoad, RouteAssignment, Coordinates } from './types/crisis';
+import { parseAndCreateRequest, optimizeDispatch } from './services/api';
+import { MapView } from './components/MapView';
+import { RequestForm } from './components/RequestForm';
+import { RequestList } from './components/RequestList';
+import { VehiclePanel } from './components/VehiclePanel';
+import { DispatchPanel } from './components/DispatchPanel';
+import './App.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+const INITIAL_DEPOT: Depot = {
+  id: 'depot-1',
+  name: 'Central Emergency Depot (Civic Auditorium)',
+  location: { lat: 36.9738, lng: -122.0289 },
+};
+
+const INITIAL_VEHICLES: Vehicle[] = [
+  { id: 'v1', name: 'Unit Alpha (Box Truck)', capacity: 200, currentLoad: 0, location: { lat: 36.9738, lng: -122.0289 }, color: '#2563eb' },
+  { id: 'v2', name: 'Unit Bravo (4x4 Van)', capacity: 150, currentLoad: 0, location: { lat: 36.9745, lng: -122.0275 }, color: '#16a34a' },
+  { id: 'v3', name: 'Unit Charlie (Utility)', capacity: 150, currentLoad: 0, location: { lat: 36.9731, lng: -122.0298 }, color: '#d97706' },
+];
+
+const INITIAL_REQUESTS: SupplyRequest[] = Array.from({ length: 15 }, (_, i) => ({
+  id: `req-${i + 1}`,
+  locationName: `Sector ${i + 1} Relief Point`,
+  location: {
+    lat: 36.965 + ((i * 37) % 19) * 0.0012,
+    lng: -122.045 + ((i * 53) % 23) * 0.0014,
+  },
+  supplyType: i % 3 === 0 ? 'Medical Kits' : i % 2 === 0 ? 'Drinking Water' : 'MRE Packs',
+  quantity: 15 + (i % 4) * 5,
+  priority: i < 4 ? 'critical' : i < 9 ? 'high' : 'medium',
+  status: 'pending',
+}));
+
+export function App() {
+  const [requests, setRequests] = useState<SupplyRequest[]>(INITIAL_REQUESTS);
+  const [vehicles] = useState<Vehicle[]>(INITIAL_VEHICLES);
+  const [blockedRoads, setBlockedRoads] = useState<BlockedRoad[]>([]);
+  const [routes, setRoutes] = useState<RouteAssignment[]>([]);
+  const [blockingMode, setBlockingMode] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const runOptimization = async (currentRequests = requests, currentBlocks = blockedRoads) => {
+    setIsOptimizing(true);
+    setError(null);
+    try {
+      const plan = await optimizeDispatch({
+        depot: INITIAL_DEPOT,
+        requests: currentRequests,
+        vehicles,
+        blockedRoads: currentBlocks,
+      });
+      setRoutes(plan);
+      const assignedIds = new Set(plan.flatMap((r) => r.stops.map((s) => s.requestId)));
+      setRequests((prev) =>
+        prev.map((r) => ({ ...r, status: assignedIds.has(r.id) ? 'assigned' : 'pending' }))
+      );
+    } catch {
+      setError('Failed to calculate dispatch routes.');
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  const handleAddRequest = async (rawText: string) => {
+    const newReq = await parseAndCreateRequest(rawText);
+    const updated = [newReq, ...requests];
+    setRequests(updated);
+    await runOptimization(updated, blockedRoads);
+  };
+
+  const handleMapClick = async (coords: Coordinates) => {
+    const newBlock: BlockedRoad = {
+      id: `block-${Date.now()}`,
+      label: `Road Closure #${blockedRoads.length + 1}`,
+      location: coords,
+    };
+    const updatedBlocks = [...blockedRoads, newBlock];
+    setBlockedRoads(updatedBlocks);
+    setBlockingMode(false);
+    await runOptimization(requests, updatedBlocks);
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="dashboard-layout">
+      <aside className="sidebar">
+        <header className="brand-header">
+          <h1>CrisisGrid</h1>
+          <span>Disaster Logistics Command</span>
+        </header>
 
-      <div className="ticks"></div>
+        {error && <div className="error-banner">{error}</div>}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        <DispatchPanel
+          routes={routes}
+          blockedRoads={blockedRoads}
+          isOptimizing={isOptimizing}
+          blockingMode={blockingMode}
+          onToggleBlockingMode={() => setBlockingMode((b) => !b)}
+          onClearBlocks={() => {
+            setBlockedRoads([]);
+            runOptimization(requests, []);
+          }}
+          onOptimize={() => runOptimization()}
+        />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        <RequestForm onSubmitText={handleAddRequest} />
+        <VehiclePanel vehicles={vehicles} routes={routes} />
+        <RequestList requests={requests} />
+      </aside>
+
+      <main className="map-wrapper">
+        <MapView
+          depot={INITIAL_DEPOT}
+          requests={requests}
+          vehicles={vehicles}
+          blockedRoads={blockedRoads}
+          routes={routes}
+          blockingMode={blockingMode}
+          onMapClick={handleMapClick}
+        />
+      </main>
+    </div>
+  );
 }
 
-export default App
+export default App;
