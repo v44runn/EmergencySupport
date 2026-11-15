@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@vis.gl/react-google-maps": "^1.10.2",
+    "lucide-react": "^1.73.0"
+  }
+}
