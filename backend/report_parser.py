@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 load_dotenv()  # reads backend/.env (already in .gitignore)
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-4-hydrogen")
 
 
 # ---------- what we ask Gemini to return ----------
